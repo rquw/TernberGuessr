@@ -1847,9 +1847,8 @@ function openVsModal(){
   openModal('vs-modal');
 }
 function showVsChoice(){
-  $('vs-choice-btns').style.display='flex';
-  $('vs-create-panel').style.display='none';
-  $('vs-join-panel').style.display='none';
+  var ch=$('vs-choice-btns');if(ch)ch.style.display='flex';
+  var jp=$('vs-join-panel');if(jp)jp.style.display='none';
   var b=$('vs-modal-back-btn');if(b)b.style.display='none';
 }
 function showVsPanel(which){
