@@ -1143,3 +1143,76 @@ body::before{
 .inline-diff-confirmed{font-size:.75rem;color:var(--gold);padding:.3rem 0}
 
 
+
+/* ──────────────────────────────────────────
+   MEHRSPIELER (Lobby, Modifiers, Ergebnisse)
+────────────────────────────────────────── */
+/* Einstellungen im Erstellen-Panel */
+.mp-setting-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+.mp-setting-row label{font-size:.8rem;color:var(--cream)}
+.modal-input.mp-num{width:5.5rem;text-align:center;padding:.5rem}
+.modal-input.mp-num-sm{width:4.2rem;padding:.4rem;margin-left:auto}
+.mp-mods{display:flex;flex-direction:column;gap:.4rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.7rem .8rem}
+.mp-mods-title{font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:.1rem}
+.mp-toggle{display:flex;align-items:center;gap:.55rem;font-size:.76rem;color:var(--cream);cursor:pointer}
+.mp-toggle input[type=checkbox]{width:1.05rem;height:1.05rem;accent-color:var(--gold);flex-shrink:0;cursor:pointer}
+
+/* Lobby */
+.mp-lobby-box{width:min(440px,94vw);display:flex;flex-direction:column;align-items:center;gap:.7rem;background:linear-gradient(170deg,rgba(255,255,255,.055),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.09);border-radius:18px;padding:1.4rem 1.3rem;box-shadow:0 22px 60px rgba(0,0,0,.3)}
+.mp-lobby-h{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--cream)}
+.mp-lobby-code-row{display:flex;align-items:center;gap:.6rem}
+.mp-lobby-code-label{font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--mist)}
+#mp-lobby-qr{border-radius:8px;background:#fff;padding:5px}
+.mp-lobby-settings{font-size:.64rem;color:var(--mist);text-align:center;line-height:1.6}
+.mp-lobby-players-title{align-self:flex-start;font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-top:.2rem}
+#mp-lobby-players{width:100%;display:flex;flex-direction:column;gap:.35rem;max-height:34vh;overflow-y:auto}
+.mp-player-row{display:flex;align-items:center;gap:.55rem;padding:.5rem .65rem;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+.mp-player-row.me{border-color:rgba(201,168,76,.45);background:rgba(201,168,76,.08)}
+.mp-player-dot{width:.65rem;height:.65rem;border-radius:50%;background:var(--mist);flex-shrink:0;opacity:.5}
+.mp-player-dot.ready{background:#7dcc6a;opacity:1;box-shadow:0 0 8px rgba(125,204,106,.6)}
+.mp-player-name{flex:1;font-size:.8rem;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-player-status{font-size:.62rem;color:var(--mist)}
+.mp-kick-btn{background:rgba(192,57,43,.18);border:1px solid rgba(192,57,43,.5);color:#f5b7b1;width:1.5rem;height:1.5rem;border-radius:6px;cursor:pointer;font-size:.7rem;line-height:1;flex-shrink:0}
+.mp-kick-btn:hover{background:rgba(192,57,43,.4);color:#fff}
+.mp-lobby-actions{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center;width:100%;margin-top:.3rem}
+.mp-lobby-actions .big-btn{flex:1;min-width:130px}
+#mp-ready-btn.active{background:rgba(125,204,106,.18);border-color:rgba(125,204,106,.6);color:#aee79c}
+
+/* Countdown */
+#mp-countdown{display:none;position:fixed;inset:0;z-index:1300;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 45%,rgba(12,20,14,.82),rgba(3,6,4,.92));font-family:'Playfair Display',serif;font-weight:900;font-size:clamp(5rem,28vw,16rem);color:var(--cream);text-shadow:0 0 60px rgba(201,168,76,.6),0 6px 30px rgba(0,0,0,.7)}
+#mp-countdown.show{display:flex;animation:mpCdPop .35s cubic-bezier(.16,1,.3,1)}
+@keyframes mpCdPop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+
+/* In-Game Badges */
+#mp-timer{position:absolute;top:.9rem;left:50%;transform:translateX(-50%) translateY(2.6rem);z-index:14;background:rgba(0,0,0,.7);border:1px solid rgba(201,168,76,.4);border-radius:20px;padding:.3rem .85rem;font-size:.78rem;font-weight:600;color:var(--gold-light);letter-spacing:.06em;backdrop-filter:blur(6px)}
+#mp-speed-badge{position:absolute;bottom:1rem;left:50%;transform:translateX(-50%);z-index:14;background:linear-gradient(180deg,#f3d889,#d6ad48);color:#231a04;border-radius:20px;padding:.32rem .9rem;font-size:.78rem;font-weight:700;letter-spacing:.04em;box-shadow:0 4px 16px rgba(0,0,0,.4),0 0 18px rgba(201,168,76,.4)}
+
+/* Rundenergebnis-Board (3+ Spieler, links) */
+#mp-round-board{position:absolute;top:50%;left:clamp(.75rem,3vw,2rem);transform:translateY(-50%);z-index:20;width:min(280px,42vw);max-height:80vh;overflow-y:auto;background:linear-gradient(170deg,rgba(14,24,16,.94),rgba(10,18,12,.96));border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:.8rem .7rem;box-shadow:0 16px 50px rgba(0,0,0,.5)}
+.mp-board-title{font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);text-align:center;margin-bottom:.5rem}
+.mp-board-row{display:flex;align-items:center;gap:.5rem;padding:.4rem .5rem;border-radius:8px;margin-bottom:.25rem;background:rgba(255,255,255,.04);font-size:.74rem}
+.mp-board-row.me{background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.4)}
+.mp-board-rank{width:1.4rem;text-align:center;color:var(--mist);font-weight:600}
+.mp-board-name{flex:1;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-board-pts{color:var(--gold-light);font-weight:600}
+
+/* Endstand (3+ Spieler) */
+#mp-final-standings{width:min(420px,92vw)}
+.mp-standings-place{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:700;color:var(--cream);text-align:center;margin-bottom:.6rem}
+.mp-standings-list{display:flex;flex-direction:column;gap:.35rem}
+.mp-standings-row{display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+.mp-standings-row.first{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.4)}
+.mp-standings-row.me{box-shadow:inset 0 0 0 1.5px rgba(201,168,76,.55)}
+.mp-standings-rank{width:1.8rem;text-align:center;font-size:.95rem}
+.mp-standings-name{flex:1;font-size:.82rem;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-standings-total{font-size:.82rem;font-weight:600;color:var(--gold-light)}
+
+@media(max-width:768px){
+  #mp-lobby-screen{justify-content:flex-start;overflow-y:auto;padding:calc(1rem + env(safe-area-inset-top)) .8rem calc(1.5rem + env(safe-area-inset-bottom))}
+  .mp-lobby-box{padding:1rem .9rem}
+  #mp-lobby-qr{width:120px;height:120px}
+  /* Board nach oben, kompakter, damit die Karte nutzbar bleibt */
+  #mp-round-board{top:calc(.65rem + env(safe-area-inset-top));left:.65rem;right:.65rem;width:auto;transform:none;max-height:34vh}
+  #mp-speed-badge{bottom:calc(165px + .9rem + env(safe-area-inset-bottom))}
+  #mp-timer{transform:translateX(-50%) translateY(calc(2.4rem + env(safe-area-inset-top)))}
+}

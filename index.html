@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
 <div id="round-flash"></div>
@@ -16,6 +16,7 @@
 <div id="round-popup"></div>
 <div id="confetti-layer"></div>
 <div id="new-highscore-banner"><span>🏆 NEUER HIGHSCORE!</span></div>
+<div id="mp-countdown"></div>
 <div class="screen-backdrop" id="screen-backdrop"></div>
 <div id="share-canvas-wrap"><canvas id="share-canvas"></canvas></div>
 
@@ -201,11 +202,11 @@
     <div class="menu-card" onclick="openVsModal()">
       <div class="menu-card-bg" id="vs-card-bg"></div>
       <div class="menu-card-left">
-        <div class="menu-card-title">1v1</div>
-        <div class="menu-card-sub">Wer ist der wahre Ternberger?</div>
+        <div class="menu-card-title">Mehrspieler</div>
+        <div class="menu-card-sub">Privater Raum mit Freunden – der Host bestimmt die Regeln.</div>
       </div>
       <div class="menu-card-right">
-        <button class="menu-card-cta" onclick="openVsModal();event.stopPropagation()">Starten →</button>
+        <button class="menu-card-cta" onclick="openVsModal();event.stopPropagation()">Spielen →</button>
       </div>
     </div>
     <div class="menu-card survival-card" onclick="startSurvival()">
@@ -313,17 +314,32 @@
 <!-- VS MODAL -->
 <div class="modal-bg" id="vs-modal">
   <div class="modal" id="vs-modal-inner" style="max-width:min(500px,95vw);width:min(500px,95vw)">
-    <h2>Gegeneinander</h2>
+    <h2>Mehrspieler</h2>
     <!-- Auswahl -->
     <div id="vs-choice-btns" style="display:flex;flex-direction:column;gap:.75rem;align-items:center">
-      <p class="modal-hint" style="text-align:center;margin-bottom:.25rem">Willst du eine Runde erstellen oder beitreten?</p>
-      <button class="big-btn primary" style="width:100%;padding:.9rem" onclick="showVsPanel('create')">Runde erstellen</button>
-      <button class="big-btn" style="width:100%;padding:.9rem" onclick="showVsPanel('join')">Runde beitreten</button>
+      <p class="modal-hint" style="text-align:center;margin-bottom:.25rem">Willst du einen Raum erstellen oder beitreten?</p>
+      <button class="big-btn primary" style="width:100%;padding:.9rem" onclick="showVsPanel('create')">Raum erstellen</button>
+      <button class="big-btn" style="width:100%;padding:.9rem" onclick="showVsPanel('join')">Raum beitreten</button>
     </div>
-    <!-- Erstellen-Panel -->
-    <div id="vs-create-panel" style="display:none;flex-direction:column;gap:.75rem">
-      <p class="modal-hint">Erstellt sofort einen Raum. Teile den Code mit deinem Gegner.</p>
-      <button class="big-btn primary" style="width:100%" onclick="createRoom()">Raum erstellen</button>
+    <!-- Erstellen-Panel: Einstellungen -->
+    <div id="vs-create-panel" style="display:none;flex-direction:column;gap:.7rem">
+      <div class="mp-setting-row">
+        <label for="mp-rounds">Runden</label>
+        <input class="modal-input mp-num" id="mp-rounds" type="number" min="1" max="20" value="5">
+      </div>
+      <div class="mp-setting-row">
+        <label for="mp-maxplayers">Max. Spieler</label>
+        <input class="modal-input mp-num" id="mp-maxplayers" type="number" min="2" max="50" placeholder="∞">
+      </div>
+      <div class="mp-mods">
+        <div class="mp-mods-title">Modifier</div>
+        <label class="mp-toggle"><input type="checkbox" id="mp-mod-nomove"><span>🚫 Nicht bewegen</span></label>
+        <label class="mp-toggle"><input type="checkbox" id="mp-mod-nolook"><span>🚫 Nicht umsehen</span></label>
+        <label class="mp-toggle"><input type="checkbox" id="mp-mod-speed"><span>⚡ Schneller = mehr Punkte (2,0×→1,0×)</span></label>
+        <label class="mp-toggle"><input type="checkbox" id="mp-mod-timelimit"><span>⏱ Zeitlimit</span>
+          <input class="modal-input mp-num mp-num-sm" id="mp-timelimit-secs" type="number" min="3" max="300" value="30" title="Sekunden"></label>
+      </div>
+      <button class="big-btn primary" style="width:100%" onclick="createRoom()">Raum erstellen →</button>
     </div>
     <!-- Beitreten-Panel -->
     <div id="vs-join-panel" style="display:none;flex-direction:column;gap:.75rem">
@@ -361,6 +377,27 @@
   </div>
 </div>
 
+<!-- MEHRSPIELER LOBBY -->
+<div class="screen" id="mp-lobby-screen">
+  <div class="mp-lobby-box">
+    <h2 class="mp-lobby-h">Lobby</h2>
+    <div class="mp-lobby-code-row">
+      <span class="mp-lobby-code-label">Code</span>
+      <span class="vs-code-display" id="mp-lobby-code">——</span>
+    </div>
+    <canvas id="mp-lobby-qr" width="150" height="150"></canvas>
+    <div class="qr-hint">Scannen oder Code teilen, um beizutreten</div>
+    <div class="mp-lobby-settings" id="mp-lobby-settings"></div>
+    <div class="mp-lobby-players-title">Spieler</div>
+    <div id="mp-lobby-players"></div>
+    <div class="mp-lobby-actions">
+      <button class="big-btn primary" id="mp-ready-btn" onclick="toggleReady()" style="display:none">Bereit ✓</button>
+      <button class="big-btn primary" id="mp-start-btn" onclick="startMatch()" style="display:none">Starten</button>
+      <button class="big-btn" onclick="leaveRoom()">Verlassen</button>
+    </div>
+  </div>
+</div>
+
 <!-- SPIEL -->
 <div class="screen" id="game-screen">
   <button id="back-to-home-btn" onclick="goHomeFromGame()" title="Zurück zum Hauptmenü">← Menü</button>
@@ -370,6 +407,8 @@
     <div id="top-bar-diff">Schwierigkeit: Unbestimmt</div>
   </div>
   <div id="vs-badge"></div>
+  <div id="mp-timer" style="display:none"></div>
+  <div id="mp-speed-badge" style="display:none"></div>
   <div id="vs-opponent-guessed"></div>
   <div id="survival-badge"></div>
   <div id="pano-container">
@@ -396,6 +435,7 @@
 <!-- ERGEBNIS -->
 <div class="screen" id="result-screen" style="position:relative">
   <div id="result-map-el"></div>
+  <div id="mp-round-board" style="display:none"></div>
   <div id="vs-wait-overlay">
     <div class="wl" id="vs-wait-overlay-text">Warte auf Gegner…</div>
     <div class="vs-wait-spinner" aria-hidden="true"></div>
@@ -465,6 +505,7 @@
     </div>
     <div class="vs-rounds" id="vs-rounds"></div>
   </div>
+  <div id="mp-final-standings" style="display:none"></div>
   <div class="final-breakdown" id="final-breakdown"></div>
   <div id="play-again-vote"></div>
   <div style="display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center">
@@ -579,7 +620,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="data.js?v=2"></script>
 <script src="text.js?v=2"></script>
-<script src="script.js?v=19"></script>
+<script src="script.js?v=21"></script>
 <script src="patches.js?v=11"></script>
 <script src="nav.js?v=7"></script>
 <!-- CHANGELOG MODAL -->
