@@ -220,9 +220,9 @@ document.addEventListener('DOMContentLoaded', function() {
       var e = document.getElementById(id); if (e) e.textContent = '…';
     });
     el = document.getElementById('profile-achievements');
-    if (el) el.innerHTML = '<div style="font-size:.65rem;color:var(--mist)">Lade…</div>';
+    if (el) el.innerHTML = (typeof skel==='function')?skel(4,'skel-ach'):'…';
     el = document.getElementById('profile-recent-scores');
-    if (el) el.innerHTML = '';
+    if (el) el.innerHTML = (typeof skel==='function')?skel(4,'skel-line'):'';
 
     try {
       var scores = await sbFetch(

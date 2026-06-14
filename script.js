@@ -395,6 +395,8 @@ function fmtDate(d){
 }
 function hdg(a){return['N','NO','O','SO','S','SW','W','NW'][Math.round((((a%360)+360)%360)/45)%8];}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// Skeleton-Loader: n graue Schimmer-Blöcke (site-weit für Ladezustände)
+function skel(n,cls){var s='';for(var i=0;i<(n||5);i++)s+='<div class="skeleton '+(cls||'skel-row')+'"></div>';return s;}
 
 function countUp(el,target,dur,onDone){
   dur=dur||900;
@@ -1018,7 +1020,7 @@ function submitGuess(){
 }
 
 function initResultMap(loc,guess){
-  $('result-screen').classList.toggle('vs-mode',!!S.isVs); // VS: Zwischenauswertung entschlacken
+  $('result-screen').classList.toggle('mp-mode',!!S.isVs); // Mehrspieler: nur Solo-Elemente ausblenden, Ergebnis-Panel behalten
   if(S.resultMap){S.resultMap.remove();S.resultMap=null;}
   var actual=getActualLatLng(loc);
   S.resultMap=L.map('result-map-el',{center:[(actual.lat+guess.lat)/2,(actual.lng+guess.lng)/2],zoom:14,zoomControl:true,attributionControl:false});
@@ -1321,7 +1323,7 @@ function openLeaderboard(){openModal('lb-modal');loadLeaderboardData();}
 var lbExpandedNames={},lbSubSort={};
 
 async function loadLeaderboardData(){
-  $('lb-list').innerHTML='<div style="font-size:.7rem;color:var(--mist);text-align:center;padding:1rem">Lade…</div>';
+  $('lb-list').innerHTML=skel(6,'skel-row');
   try{
     var path='scores?select=id,name,score,created_at';
     if(S.leaderboardTab==='week') path+='&created_at=gte.'+getWeekStartKeyVienna()+'T00:00:00';
@@ -1741,7 +1743,7 @@ async function loadDailyChampions(){
 
 async function loadDailyBoard(){
   var boardEl=$('daily-lb-list');if(!boardEl)return;
-  boardEl.innerHTML='<div style="font-size:.7rem;color:var(--mist);text-align:center;padding:1rem">Lade…</div>';
+  boardEl.innerHTML=skel(4,'skel-row');
   try{
     var rows=await sbFetch('daily_scores?date_key=eq.'+getViennaDateKey()+'&select=name,score,created_at&order=score.desc&limit=50');
     boardEl.innerHTML='';
@@ -1853,8 +1855,18 @@ function showVsChoice(){
 function showVsPanel(which){
   $('vs-choice-btns').style.display='none';
   var b=$('vs-modal-back-btn');if(b)b.style.display='block';
-  if(which==='create'){$('vs-create-panel').style.display='flex';$('vs-join-panel').style.display='none';}
-  else{$('vs-create-panel').style.display='none';$('vs-join-panel').style.display='flex';setTimeout(function(){var c=$('vs-join-code');if(c)c.focus();},100);}
+  // nur noch das Beitreten-Panel; Erstellen geht direkt in die Lobby (Einstellungen dort)
+  $('vs-join-panel').style.display='flex';
+  setTimeout(function(){var c=$('vs-join-code');if(c)c.focus();},100);
+}
+// Host ändert Einstellungen live in der Lobby
+function mpHostUpdateSettings(){
+  if(!S.vsIsHost||!S.vsRoom)return;
+  var rounds=Math.max(1,Math.min(20,parseInt(($('mp-rounds')&&$('mp-rounds').value)||'5',10)||5));
+  var maxRaw=(($('mp-maxplayers')&&$('mp-maxplayers').value)||'').trim();
+  var maxPlayers=maxRaw?Math.max(2,Math.min(50,parseInt(maxRaw,10)||2)):null;
+  var modifiers=mpReadModifiers();
+  sbFetch('rooms?id=eq.'+S.vsRoom,'PATCH',{rounds:rounds,max_players:maxPlayers,modifiers:modifiers,last_activity:new Date().toISOString()}).catch(function(){});
 }
 function mpReadModifiers(){
   function ck(id){var e=$(id);return !!(e&&e.checked);}
@@ -1869,10 +1881,8 @@ async function createRoom(){
   ensurePlayerId();
   var session=loadSession();
   var name=session.name||(($('vs-host-name')&&$('vs-host-name').value)||'').trim()||'Spieler';
-  var rounds=Math.max(1,Math.min(20,parseInt(($('mp-rounds')&&$('mp-rounds').value)||'5',10)||5));
-  var maxRaw=(($('mp-maxplayers')&&$('mp-maxplayers').value)||'').trim();
-  var maxPlayers=maxRaw?Math.max(2,Math.min(50,parseInt(maxRaw,10)||2)):null;
-  var modifiers=mpReadModifiers();
+  // Standard-Einstellungen; der Host passt sie danach live in der Lobby an
+  var rounds=5, maxPlayers=null, modifiers={noMove:false,noLook:false,speedBonus:false,timeLimit:null};
   roomCreationInProgress=true;
   var code=randomCode();
   try{
@@ -1946,27 +1956,42 @@ function enterLobby(){
   show('mp-lobby-screen');
   var cd=$('mp-lobby-code');if(cd)cd.textContent=S.vsRoom;
   try{var qc=$('mp-lobby-qr');if(qc)drawQR(qc,window.location.origin+window.location.pathname+'?join='+S.vsRoom);}catch(e){}
+  S._mpSettingsInit=false;
   startMpPoll();startMpHeartbeat();
 }
 function renderLobby(room,players){
   var mod=room.modifiers||{};
-  var bits=['Runden: '+(room.rounds||5),(room.max_players?('Max '+room.max_players):'∞ Spieler')];
-  if(mod.noMove)bits.push('🚫 Bewegen');
-  if(mod.noLook)bits.push('🚫 Umsehen');
-  if(mod.timeLimit)bits.push('⏱ '+mod.timeLimit+'s');
-  if(mod.speedBonus)bits.push('⚡ Speed-Bonus');
-  var sum=$('mp-lobby-settings');if(sum)sum.textContent=bits.join('  ·  ');
+  // Einstellungs-Controls: Host darf bearbeiten (nur einmal initial befüllen, sonst tippt man dagegen an);
+  // Gäste sehen sie schreibgeschützt und gespiegelt.
+  var host=S.vsIsHost;
+  function setVal(id,v){var e=$(id);if(e&&document.activeElement!==e)e.value=v;}
+  function setChk(id,v){var e=$(id);if(e)e.checked=!!v;}
+  function setDis(id,d){var e=$(id);if(e)e.disabled=d;}
+  if(!host){
+    setVal('mp-rounds',room.rounds||5);
+    setVal('mp-maxplayers',room.max_players||'');
+    setChk('mp-mod-nomove',mod.noMove);setChk('mp-mod-nolook',mod.noLook);setChk('mp-mod-speed',mod.speedBonus);
+    setChk('mp-mod-timelimit',!!mod.timeLimit);setVal('mp-timelimit-secs',mod.timeLimit||30);
+  } else if(!S._mpSettingsInit){
+    S._mpSettingsInit=true;
+    setVal('mp-rounds',room.rounds||5);setVal('mp-maxplayers',room.max_players||'');
+    setChk('mp-mod-nomove',mod.noMove);setChk('mp-mod-nolook',mod.noLook);setChk('mp-mod-speed',mod.speedBonus);
+    setChk('mp-mod-timelimit',!!mod.timeLimit);setVal('mp-timelimit-secs',mod.timeLimit||30);
+  }
+  ['mp-rounds','mp-maxplayers','mp-mod-nomove','mp-mod-nolook','mp-mod-speed','mp-mod-timelimit','mp-timelimit-secs'].forEach(function(id){setDis(id,!host);});
+  var lock=$('mp-settings-lock');if(lock)lock.textContent=host?'':'(nur Host)';
   var online=mpInMatch(players).filter(function(p){return mpOnline(p)||p.player_id===S.playerId;});
+  var cnt=$('mp-lobby-count');if(cnt)cnt.textContent='('+online.length+')';
   var list=$('mp-lobby-players');
   if(list){
-    list.innerHTML=online.map(function(p){
-      var you=p.player_id===S.playerId,host=p.player_id===room.host_id;
-      var kick=(S.vsIsHost&&!host)?'<button class="mp-kick-btn" onclick="kickPlayer(\''+p.player_id+'\')" title="Entfernen">✕</button>':'';
+    list.innerHTML=online.length?online.map(function(p){
+      var you=p.player_id===S.playerId,ph=p.player_id===room.host_id;
+      var kick=(S.vsIsHost&&!ph)?'<button class="mp-kick-btn" onclick="kickPlayer(\''+p.player_id+'\')" title="Entfernen">✕</button>':'';
       return '<div class="mp-player-row'+(you?' me':'')+'">'+
         '<span class="mp-player-dot'+(p.ready?' ready':'')+'"></span>'+
-        '<span class="mp-player-name">'+escHtml(p.name)+(host?' 👑':'')+(you?' (Du)':'')+'</span>'+
+        '<span class="mp-player-name">'+escHtml(p.name)+(ph?' 👑':'')+(you?' (Du)':'')+'</span>'+
         '<span class="mp-player-status">'+(p.ready?'Bereit':'…')+'</span>'+kick+'</div>';
-    }).join('');
+    }).join(''):'<div class="mp-empty">Warte auf Spieler…</div>';
   }
   var meRow=online.filter(function(p){return p.player_id===S.playerId;})[0];
   var rb=$('mp-ready-btn');
@@ -2181,7 +2206,7 @@ function mpOnSubmit(pts){
   S._mpWaitForLen=S.round+1;S._mpLastPts=pts;S._mpLastGuess={lat:S.guessLatLng.lat,lng:S.guessLatLng.lng};S._mpRepushing=false;
   mpClearRoundClock();
   pushMpScore(pts,S.guessLatLng);
-  var bw=$('vs-bottom-wait');if(bw)bw.classList.add('show');
+  var bw=$('vs-bottom-wait');if(bw){bw.textContent='⏳ Warte auf die anderen Spieler…';bw.classList.add('show');}
   var nb=$('next-btn');if(nb)nb.style.display='none';
 }
 async function pushMpScore(pts,guessLL){
@@ -2208,6 +2233,11 @@ function mpUpdateLiveState(room,players){
     }
   }
   if(!$('result-screen').classList.contains('active'))return;
+  // Status-Zeile: warten vs. gleich weiter
+  var onlineN=inMatch.filter(function(p){return mpOnline(p)||p.player_id===S.playerId;});
+  var allDone=onlineN.length>0&&onlineN.every(function(p){return (p.scores||[]).length>S.round;});
+  var bw=$('vs-bottom-wait');
+  if(bw&&S._mpWaitForLen){ bw.classList.add('show'); bw.textContent=allDone?'✓ Alle fertig – nächste Runde startet gleich…':('⏳ Warte auf die anderen Spieler… ('+onlineN.filter(function(p){return (p.scores||[]).length>S.round;}).length+'/'+onlineN.length+')'); }
   if(inMatch.length<=2){
     var opp=inMatch.filter(function(p){return p.player_id!==S.playerId;})[0];
     if(opp&&(opp.scores||[]).length>S.round&&!S.vsTheirDone){
@@ -2449,7 +2479,7 @@ function renderChangelogList(entries){
 
 async function openChangelog(){
   $('changelog-admin-bar').style.display=lbAdminMode?'flex':'none';openModal('changelog-modal');
-  $('changelog-list').innerHTML='<div style="font-size:.7rem;color:var(--mist);text-align:center;padding:2rem">Lade…</div>';
+  $('changelog-list').innerHTML=skel(3,'skel-row');
   var entries=await loadChangelogEntries();renderChangelogList(entries);
 }
 

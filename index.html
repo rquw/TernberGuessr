@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="styles.css?v=15">
+<link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
 <div id="round-flash"></div>
@@ -317,29 +317,9 @@
     <h2>Mehrspieler</h2>
     <!-- Auswahl -->
     <div id="vs-choice-btns" style="display:flex;flex-direction:column;gap:.75rem;align-items:center">
-      <p class="modal-hint" style="text-align:center;margin-bottom:.25rem">Willst du einen Raum erstellen oder beitreten?</p>
-      <button class="big-btn primary" style="width:100%;padding:.9rem" onclick="showVsPanel('create')">Raum erstellen</button>
+      <p class="modal-hint" style="text-align:center;margin-bottom:.25rem">Erstelle einen Raum (du bist Host und stellst alles ein) oder tritt mit einem Code bei.</p>
+      <button class="big-btn primary" style="width:100%;padding:.9rem" onclick="createRoom()">Raum erstellen →</button>
       <button class="big-btn" style="width:100%;padding:.9rem" onclick="showVsPanel('join')">Raum beitreten</button>
-    </div>
-    <!-- Erstellen-Panel: Einstellungen -->
-    <div id="vs-create-panel" style="display:none;flex-direction:column;gap:.7rem">
-      <div class="mp-setting-row">
-        <label for="mp-rounds">Runden</label>
-        <input class="modal-input mp-num" id="mp-rounds" type="number" min="1" max="20" value="5">
-      </div>
-      <div class="mp-setting-row">
-        <label for="mp-maxplayers">Max. Spieler</label>
-        <input class="modal-input mp-num" id="mp-maxplayers" type="number" min="2" max="50" placeholder="∞">
-      </div>
-      <div class="mp-mods">
-        <div class="mp-mods-title">Modifier</div>
-        <label class="mp-toggle"><input type="checkbox" id="mp-mod-nomove"><span>🚫 Nicht bewegen</span></label>
-        <label class="mp-toggle"><input type="checkbox" id="mp-mod-nolook"><span>🚫 Nicht umsehen</span></label>
-        <label class="mp-toggle"><input type="checkbox" id="mp-mod-speed"><span>⚡ Schneller = mehr Punkte (2,0×→1,0×)</span></label>
-        <label class="mp-toggle"><input type="checkbox" id="mp-mod-timelimit"><span>⏱ Zeitlimit</span>
-          <input class="modal-input mp-num mp-num-sm" id="mp-timelimit-secs" type="number" min="3" max="300" value="30" title="Sekunden"></label>
-      </div>
-      <button class="big-btn primary" style="width:100%" onclick="createRoom()">Raum erstellen →</button>
     </div>
     <!-- Beitreten-Panel -->
     <div id="vs-join-panel" style="display:none;flex-direction:column;gap:.75rem">
@@ -380,16 +360,32 @@
 <!-- MEHRSPIELER LOBBY -->
 <div class="screen" id="mp-lobby-screen">
   <div class="mp-lobby-box">
-    <h2 class="mp-lobby-h">Lobby</h2>
-    <div class="mp-lobby-code-row">
-      <span class="mp-lobby-code-label">Code</span>
-      <span class="vs-code-display" id="mp-lobby-code">——</span>
+    <div class="mp-lobby-header">
+      <h2 class="mp-lobby-h">Lobby</h2>
+      <div class="mp-lobby-code-row"><span class="mp-lobby-code-label">Code</span><span class="vs-code-display" id="mp-lobby-code">——</span></div>
     </div>
-    <canvas id="mp-lobby-qr" width="150" height="150"></canvas>
-    <div class="qr-hint">Scannen oder Code teilen, um beizutreten</div>
-    <div class="mp-lobby-settings" id="mp-lobby-settings"></div>
-    <div class="mp-lobby-players-title">Spieler</div>
-    <div id="mp-lobby-players"></div>
+    <div class="mp-lobby-grid">
+      <div class="mp-lobby-col">
+        <div class="mp-col-title">Spieler <span id="mp-lobby-count" class="mp-col-sub"></span></div>
+        <div id="mp-lobby-players"></div>
+        <div class="mp-lobby-qr-wrap">
+          <canvas id="mp-lobby-qr" width="120" height="120"></canvas>
+          <div class="qr-hint">Code/QR teilen zum Beitreten</div>
+        </div>
+      </div>
+      <div class="mp-lobby-col">
+        <div class="mp-col-title">Einstellungen <span id="mp-settings-lock" class="mp-col-sub"></span></div>
+        <div class="mp-setting-row"><label for="mp-rounds">Runden</label><input class="modal-input mp-num" id="mp-rounds" type="number" min="1" max="20" value="5" onchange="mpHostUpdateSettings()"></div>
+        <div class="mp-setting-row"><label for="mp-maxplayers">Max. Spieler</label><input class="modal-input mp-num" id="mp-maxplayers" type="number" min="2" max="50" placeholder="∞" onchange="mpHostUpdateSettings()"></div>
+        <div class="mp-mods">
+          <div class="mp-mods-title">Modifier</div>
+          <label class="mp-toggle"><input type="checkbox" id="mp-mod-nomove" onchange="mpHostUpdateSettings()"><span>🚫 Nicht bewegen</span></label>
+          <label class="mp-toggle"><input type="checkbox" id="mp-mod-nolook" onchange="mpHostUpdateSettings()"><span>🚫 Nicht umsehen</span></label>
+          <label class="mp-toggle"><input type="checkbox" id="mp-mod-speed" onchange="mpHostUpdateSettings()"><span>⚡ Schneller = mehr Punkte</span></label>
+          <label class="mp-toggle"><input type="checkbox" id="mp-mod-timelimit" onchange="mpHostUpdateSettings()"><span>⏱ Zeitlimit</span><input class="modal-input mp-num mp-num-sm" id="mp-timelimit-secs" type="number" min="3" max="300" value="30" onchange="mpHostUpdateSettings()"></label>
+        </div>
+      </div>
+    </div>
     <div class="mp-lobby-actions">
       <button class="big-btn primary" id="mp-ready-btn" onclick="toggleReady()" style="display:none">Bereit ✓</button>
       <button class="big-btn primary" id="mp-start-btn" onclick="startMatch()" style="display:none">Starten</button>
@@ -620,8 +616,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="data.js?v=2"></script>
 <script src="text.js?v=2"></script>
-<script src="script.js?v=21"></script>
-<script src="patches.js?v=11"></script>
+<script src="script.js?v=22"></script>
+<script src="patches.js?v=12"></script>
 <script src="nav.js?v=7"></script>
 <!-- CHANGELOG MODAL -->
 <div class="modal-bg" id="changelog-modal">

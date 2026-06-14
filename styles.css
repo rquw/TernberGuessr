@@ -544,13 +544,17 @@ body::before{
 @media(max-width:768px){#vs-opponent-guessed{top:2.7rem;font-size:.64rem;padding:.42rem .85rem}}
 
 /* ── VS-Zwischenauswertung: nur die zwei Kopf-an-Kopf-Karten ── */
-#result-screen.vs-mode .result-stats,
-#result-screen.vs-mode #score-verdict,
-#result-screen.vs-mode #inline-diff-rating,
-#result-screen.vs-mode #vs-strip,
-#result-screen.vs-mode #vs-bottom-wait,
-#result-screen.vs-mode #vs-submit-countdown,
-#result-screen.vs-mode #survival-threshold-row{display:none!important}
+/* Mehrspieler-Ergebnis: nur Solo-spezifische Teile + den manuellen Weiter-Button ausblenden,
+   die Statistik / den Status / die Kopf-an-Kopf-Karte aber behalten (sonst sieht man nur die Karte). */
+#result-screen.mp-mode #inline-diff-rating,
+#result-screen.mp-mode #vs-strip,
+#result-screen.mp-mode #vs-submit-countdown,
+#result-screen.mp-mode #next-vote-bar,
+#result-screen.mp-mode .btn-row,
+#result-screen.mp-mode #survival-threshold-row{display:none!important}
+#result-screen.mp-mode #result-footer{max-height:46vh;overflow-y:auto}
+#vs-bottom-wait{display:none;font-size:.72rem;color:var(--gold-light);text-align:center;letter-spacing:.04em}
+#vs-bottom-wait.show{display:block}
 
 /* ── Result screen revamp ── */
 #result-footer{background:linear-gradient(180deg,rgba(10,22,14,.92),rgba(12,25,17,.98));padding:1rem 1.2rem;display:flex;flex-direction:column;gap:.7rem;border-top:1px solid rgba(255,255,255,.06)}
@@ -1213,6 +1217,33 @@ body::before{
   #mp-lobby-qr{width:120px;height:120px}
   /* Board nach oben, kompakter, damit die Karte nutzbar bleibt */
   #mp-round-board{top:calc(.65rem + env(safe-area-inset-top));left:.65rem;right:.65rem;width:auto;transform:none;max-height:34vh}
-  #mp-speed-badge{bottom:calc(165px + .9rem + env(safe-area-inset-bottom))}
-  #mp-timer{transform:translateX(-50%) translateY(calc(2.4rem + env(safe-area-inset-top)))}
+  /* Timer + Speed-Badge nach oben (mittig, gestapelt unter der Top-Bar) statt unten – sonst verdeckt die Karte sie */
+  #mp-timer{left:50%;right:auto;bottom:auto;top:calc(.65rem + env(safe-area-inset-top));transform:translateX(-50%) translateY(2.6rem)}
+  #mp-speed-badge{left:50%;right:auto;bottom:auto;top:calc(.65rem + env(safe-area-inset-top));transform:translateX(-50%) translateY(5rem)}
 }
+
+/* ── Lobby: zweispaltig (Spieler | Einstellungen) ── */
+#mp-lobby-screen{justify-content:center}
+.mp-lobby-box{width:min(720px,94vw)!important}
+.mp-lobby-header{display:flex;align-items:center;justify-content:space-between;width:100%;gap:1rem;flex-wrap:wrap}
+.mp-lobby-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;width:100%;align-items:start}
+.mp-lobby-col{display:flex;flex-direction:column;gap:.55rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:.85rem .8rem;min-width:0}
+.mp-col-title{font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+.mp-col-sub{color:var(--mist);letter-spacing:0;text-transform:none;font-size:.62rem}
+.mp-empty{font-size:.7rem;color:var(--mist);text-align:center;padding:1rem .5rem;font-style:italic}
+.mp-lobby-qr-wrap{display:flex;flex-direction:column;align-items:center;gap:.3rem;margin-top:.4rem}
+#mp-lobby-qr{border-radius:8px;background:#fff;padding:5px}
+.mp-lobby-col .mp-mods{background:rgba(0,0,0,.18)}
+.mp-toggle input[type=checkbox]:disabled,.mp-num:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:768px){
+  .mp-lobby-grid{grid-template-columns:1fr}
+}
+
+/* ── Skeleton-Loader (site-weit) ── */
+.skeleton{position:relative;overflow:hidden;background:rgba(255,255,255,.05);border-radius:8px}
+.skeleton::after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent);animation:skelShimmer 1.25s infinite}
+@keyframes skelShimmer{100%{transform:translateX(100%)}}
+.skel-row{height:2.6rem;margin-bottom:.45rem}
+.skel-line{height:.8rem;margin:.4rem 0}
+.skel-stat{height:3.2rem;border-radius:10px}
+.skel-ach{height:3rem;margin-bottom:.3rem}
