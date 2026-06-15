@@ -1280,6 +1280,16 @@ body::before{
 .mp-wait-name{font-family:'DM Mono',monospace;font-size:.8rem;color:var(--cream);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:.35rem .85rem;animation:mpWaitPulse 1.6s ease-in-out infinite}
 @keyframes mpWaitPulse{0%,100%{opacity:.6}50%{opacity:1}}
 
+/* ── Überspringen-Abstimmung ── */
+.mp-skip-vote{display:flex;flex-direction:column;align-items:center;gap:.5rem;margin-top:.4rem}
+.mp-skip-vote-btn{background:rgba(201,168,76,.16);border:1px solid rgba(201,168,76,.5);color:var(--gold);font-family:'DM Mono',monospace;font-size:.78rem;letter-spacing:.03em;border-radius:22px;padding:.55rem 1.3rem;cursor:pointer;transition:background .15s,transform .1s}
+.mp-skip-vote-btn:hover:not(:disabled){background:rgba(201,168,76,.28);transform:translateY(-1px)}
+.mp-skip-vote-btn:disabled{opacity:.6;cursor:default}
+.mp-skip-tally{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mist)}
+#mp-skip-notice{display:none;position:fixed;top:3.1rem;left:50%;transform:translateX(-50%);background:rgba(201,168,76,.92);color:#1a1206;font-size:.66rem;font-weight:600;letter-spacing:.02em;padding:.45rem 1.05rem;border-radius:20px;z-index:300;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+#mp-skip-notice.show{display:block;animation:mpWaitPulse 1.8s ease-in-out infinite}
+@media(max-width:600px){#mp-skip-notice{top:2.7rem}}
+
 /* ── Raumliste (Beitreten) ── */
 .mp-roomlist-head{display:flex;align-items:center;justify-content:space-between;font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
 .mp-refresh-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:var(--cream);border-radius:6px;width:1.7rem;height:1.7rem;cursor:pointer;font-size:.9rem;line-height:1;transition:transform .3s,background .15s}

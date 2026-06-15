@@ -2052,7 +2052,7 @@ async function startMatch(){
     if(online.length<2||!online.every(function(p){return p.ready;})){S._mpStarting=false;return;}
     var n=Math.max(1,room.rounds||5);
     var locs=shuffle(LOCATIONS.slice()).slice(0,n).map(function(l){return l.id;});
-    await sbFetch('room_players?room_id=eq.'+S.vsRoom,'PATCH',{scores:[],guess_latlng:null});
+    await sbFetch('room_players?room_id=eq.'+S.vsRoom,'PATCH',{scores:[],guess_latlng:null,skip_vote:null});
     await sbFetch('rooms?id=eq.'+S.vsRoom,'PATCH',{status:'playing',current_round:0,location_ids:locs,round_started_at:new Date().toISOString(),last_activity:new Date().toISOString()});
   }catch(e){S._mpStarting=false;}
 }
@@ -2104,6 +2104,7 @@ async function mpPollTick(){
       var cr=room.current_round||0;
       if(cr>S.round){goToMpRound(cr,room);return;}
       mpUpdateLiveState(room,players);
+      mpMaybeShowSkipNotice(room,players);
       if(S.vsIsHost)mpHostMaybeAdvance(room,players);
       return;
     }
@@ -2194,7 +2195,7 @@ function beginMpMatch(room){
   S.locations=(room.location_ids||[]).map(function(id){return LOCATIONS.find(function(l){return l.id===id;});}).filter(Boolean);
   S.round=0;S.score=0;S.roundScores=[];
   S.mpRoundStartedAt=room.round_started_at?new Date(room.round_started_at).getTime():Date.now();
-  S._mpWaitForLen=0;S._mpRepushing=false;S._mpLastGuess=null;S.vsTheirDone=false;S._mpAdvanceAt=0;
+  S._mpWaitForLen=0;S._mpRepushing=false;S._mpLastGuess=null;S.vsTheirDone=false;S._mpAdvanceAt=0;S._mpSkipVotedRound=-1;
   var others=mpInMatch(S.mpPlayers).filter(function(p){return p.player_id!==S.playerId;});
   S.vsTheirName=others[0]?others[0].name:'Gegner';
   var nP=mpInMatch(S.mpPlayers).length;
@@ -2219,8 +2220,8 @@ function goToMpRound(targetRound,room){
   mpClearRoundClock();
   if(S._mpRevealIv){clearInterval(S._mpRevealIv);S._mpRevealIv=null;}
   S.round=targetRound;
-  S.vsTheirDone=false;S._mpWaitForLen=0;S._mpRepushing=false;S._mpLastGuess=null;S._mpAdvanceAt=0;S._mpRevealed=false;
-  hideVsWaitOverlay();
+  S.vsTheirDone=false;S._mpWaitForLen=0;S._mpRepushing=false;S._mpLastGuess=null;S._mpAdvanceAt=0;S._mpRevealed=false;S._mpSkipVotedRound=-1;
+  hideVsWaitOverlay();mpRemoveSkipUI();mpHideSkipNotice();
   var board=$('mp-round-board');if(board){board.style.display='none';board.innerHTML='';}
   var row=$('vs-their-guess-row');if(row){row.style.display='none';row.innerHTML='';}
   hideVsWaitOverlay();var bw=$('vs-bottom-wait');if(bw)bw.classList.remove('show');
@@ -2238,8 +2239,11 @@ function mpHostMaybeAdvance(room,players){
   var mod=room.modifiers||{};
   var elapsed=(Date.now()-(S.mpRoundStartedAt||Date.now()))/1000;
   var timeUp=mod.timeLimit&&elapsed>(mod.timeLimit+5);
-  if(allDone||timeUp){
-    if(!S._mpAdvanceAt)S._mpAdvanceAt=Date.now()+(allDone?4000:0);
+  // Überspringen-Abstimmung: ab 3 Spielern, >=60% Ja-Stimmen → sofort vorrücken
+  var skipVotesN=online.filter(function(p){return p.skip_vote===S.round;}).length;
+  var skipForce=(online.length>=3)&&(skipVotesN>=mpSkipNeeded(online.length));
+  if(allDone||timeUp||skipForce){
+    if(!S._mpAdvanceAt)S._mpAdvanceAt=Date.now()+((allDone&&!skipForce)?4000:0);
     if(Date.now()<S._mpAdvanceAt)return;
     S._mpAdvanceLock=true;S._mpAdvanceAt=0;
     var next=S.round+1;
@@ -2327,8 +2331,10 @@ function mpUpdateLiveState(room,players){
   if(notDone.length>0){
     // Noch nicht alle fertig → nur Warte-Overlay mit den noch ratenden Spielern, KEIN Ergebnis
     showMpWaitOverlay(notDone.map(function(p){return p.name;}));
+    mpRenderSkipUI(onlineN);
     return;
   }
+  mpRemoveSkipUI();
   // Alle fertig → Ergebnis einmalig aufdecken + Countdown
   if(!S._mpRevealed){
     S._mpRevealed=true;
@@ -2349,6 +2355,56 @@ function mpUpdateLiveState(room,players){
   }else if(inMatch.length>2){
     renderMpRoundBoard(inMatch);
   }
+}
+// ── Überspringen-Abstimmung (nur ab 3 Spielern) ──
+// Wartende (bereits abgegeben) dürfen abstimmen, sobald >=40% der Lobby abgegeben hat;
+// bei >=60% Ja-Stimmen wird die Runde übersprungen. In 2er-Lobbys deaktiviert.
+var MP_SKIP_SUBMIT_PCT=0.4, MP_SKIP_VOTE_PCT=0.6;
+function mpSkipNeeded(lobbyN){ return Math.ceil(MP_SKIP_VOTE_PCT*lobbyN); }
+function mpVoteSkip(){
+  if(!S.vsRoom)return;
+  S._mpSkipVotedRound=S.round; // sofortiges UI-Feedback bis zum nächsten Poll
+  sbFetch(_pq(),'PATCH',{skip_vote:S.round,last_seen:new Date().toISOString()}).catch(function(){});
+  var b=$('mp-skip-vote-btn');if(b){b.disabled=true;b.textContent='Stimme abgegeben ✓';}
+}
+// Button im Warte-Overlay für Spieler, die schon abgegeben haben
+function mpRenderSkipUI(onlineN){
+  var o=$('vs-wait-overlay');if(!o)return;
+  var lobbyN=onlineN.length;
+  var submittedN=onlineN.filter(function(p){return (p.scores||[]).length>S.round;}).length;
+  var skipVotesN=onlineN.filter(function(p){return p.skip_vote===S.round;}).length;
+  var meRow=onlineN.filter(function(p){return p.player_id===S.playerId;})[0];
+  var iVoted=!!(meRow&&meRow.skip_vote===S.round)||S._mpSkipVotedRound===S.round;
+  var eligible=(lobbyN>=3)&&(submittedN>=Math.ceil(MP_SKIP_SUBMIT_PCT*lobbyN));
+  var wrap=$('mp-skip-vote');
+  if(!eligible){ if(wrap)wrap.remove(); return; }
+  if(!wrap){
+    wrap=document.createElement('div');wrap.id='mp-skip-vote';wrap.className='mp-skip-vote';
+    wrap.innerHTML='<button class="mp-skip-vote-btn" id="mp-skip-vote-btn" onclick="mpVoteSkip()"></button><div class="mp-skip-tally" id="mp-skip-tally"></div>';
+    o.appendChild(wrap);
+  }
+  var b=$('mp-skip-vote-btn'),tally=$('mp-skip-tally');
+  if(b){ b.disabled=iVoted; b.textContent=iVoted?'Stimme abgegeben ✓':'Stimmen fürs Überspringen'; }
+  if(tally)tally.textContent=skipVotesN+'/'+lobbyN+' fürs Überspringen';
+}
+function mpRemoveSkipUI(){ var w=$('mp-skip-vote');if(w)w.remove(); }
+// Hinweis für noch ratende Spieler auf dem Spielbildschirm
+function mpEnsureSkipNotice(){
+  var el=$('mp-skip-notice');
+  if(!el){ el=document.createElement('div');el.id='mp-skip-notice';el.className='mp-skip-notice';var gs=$('game-screen');if(gs)gs.appendChild(el); }
+  return el;
+}
+function mpShowSkipNotice(x,y){ var el=mpEnsureSkipNotice();if(!el)return;el.textContent='⏭ '+x+'/'+y+' Personen haben fürs Überspringen gestimmt!';el.classList.add('show'); }
+function mpHideSkipNotice(){ var el=$('mp-skip-notice');if(el)el.classList.remove('show'); }
+function mpMaybeShowSkipNotice(room,players){
+  if(!$('game-screen').classList.contains('active')){mpHideSkipNotice();return;}
+  var onlineN=mpInMatch(players).filter(function(p){return mpOnline(p)||p.player_id===S.playerId;});
+  var lobbyN=onlineN.length;
+  var meRow=onlineN.filter(function(p){return p.player_id===S.playerId;})[0];
+  var iSubmitted=!!(meRow&&(meRow.scores||[]).length>S.round);
+  var skipVotesN=onlineN.filter(function(p){return p.skip_vote===S.round;}).length;
+  if(lobbyN>=3&&!iSubmitted&&skipVotesN>0)mpShowSkipNotice(skipVotesN,lobbyN);
+  else mpHideSkipNotice();
 }
 function renderMpRoundBoard(inMatch){
   var board=$('mp-round-board');if(!board)return;
@@ -2454,7 +2510,7 @@ async function votePlayAgain(){
 async function backToLobby(){
   if(S.vsIsHost&&S.vsRoom){
     try{
-      await sbFetch('room_players?room_id=eq.'+S.vsRoom,'PATCH',{scores:[],guess_latlng:null,ready:false});
+      await sbFetch('room_players?room_id=eq.'+S.vsRoom,'PATCH',{scores:[],guess_latlng:null,ready:false,skip_vote:null});
       await sbFetch('rooms?id=eq.'+S.vsRoom,'PATCH',{status:'lobby',current_round:0,location_ids:[],round_started_at:null,last_activity:new Date().toISOString()});
     }catch(e){}
   }

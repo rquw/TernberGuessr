@@ -26,8 +26,11 @@ create table if not exists public.room_players (
   scores       integer[] not null default '{}',
   guess_latlng jsonb,
   kicked       boolean not null default false,
+  skip_vote    integer,                 -- Runde, für die dieser Spieler "Überspringen" gewählt hat (NULL = keine Stimme)
   joined_at    timestamptz not null default now()
 );
+-- skip_vote nachträglich für bestehende Tabellen ergänzen (idempotent)
+alter table public.room_players add column if not exists skip_vote integer;
 create unique index if not exists room_players_room_player_uniq on public.room_players (room_id, player_id);
 create index if not exists room_players_room_idx on public.room_players (room_id);
 
