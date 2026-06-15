@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="styles.css?v=16">
+<link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
 <div id="round-flash"></div>
@@ -322,12 +322,16 @@
       <button class="big-btn" style="width:100%;padding:.9rem" onclick="showVsPanel('join')">Raum beitreten</button>
     </div>
     <!-- Beitreten-Panel -->
-    <div id="vs-join-panel" style="display:none;flex-direction:column;gap:.75rem">
-      <p class="modal-hint">Gib den Code von deinem Gegner ein.</p>
+    <div id="vs-join-panel" style="display:none;flex-direction:column;gap:.7rem">
+      <div class="mp-roomlist-head"><span>Offene Räume</span><button class="mp-refresh-btn" onclick="loadRoomList()" title="Aktualisieren">⟳</button></div>
+      <div id="vs-room-list"><div class="mp-empty">Lade…</div></div>
+      <div class="mp-or">oder Code eingeben</div>
       <input class="modal-input" id="vs-join-name" placeholder="Dein Name" maxlength="20" style="display:none">
-      <input class="modal-input" id="vs-join-code" placeholder="Raumcode (z.B. ABC123)" maxlength="6" style="text-transform:uppercase">
+      <div class="modal-row" style="gap:.5rem">
+        <input class="modal-input" id="vs-join-code" placeholder="z.B. ABC123" maxlength="6" style="text-transform:uppercase;flex:1">
+        <button class="big-btn" onclick="joinRoom()" style="padding:.65rem 1rem">Beitreten</button>
+      </div>
       <div class="modal-error" id="vs-join-error"></div>
-      <button class="big-btn" onclick="joinRoom()" style="width:100%">Beitreten</button>
       <button class="vs-scan-btn" onclick="openQrScanner()">📷 QR scannen</button>
     </div>
     <!-- verstecktes Feld für Host-Namen -->
@@ -364,6 +368,8 @@
       <h2 class="mp-lobby-h">Lobby</h2>
       <div class="mp-lobby-code-row"><span class="mp-lobby-code-label">Code</span><span class="vs-code-display" id="mp-lobby-code">——</span></div>
     </div>
+    <button class="big-btn primary mp-ready-bar" id="mp-ready-btn" onclick="toggleReady()">Bereit</button>
+    <div class="mp-start-hint" id="mp-start-hint"></div>
     <div class="mp-lobby-grid">
       <div class="mp-lobby-col">
         <div class="mp-col-title">Spieler <span id="mp-lobby-count" class="mp-col-sub"></span></div>
@@ -379,16 +385,31 @@
         <div class="mp-setting-row"><label for="mp-maxplayers">Max. Spieler</label><input class="modal-input mp-num" id="mp-maxplayers" type="number" min="2" max="50" placeholder="∞" onchange="mpHostUpdateSettings()"></div>
         <div class="mp-mods">
           <div class="mp-mods-title">Modifier</div>
-          <label class="mp-toggle"><input type="checkbox" id="mp-mod-nomove" onchange="mpHostUpdateSettings()"><span>🚫 Nicht bewegen</span></label>
-          <label class="mp-toggle"><input type="checkbox" id="mp-mod-nolook" onchange="mpHostUpdateSettings()"><span>🚫 Nicht umsehen</span></label>
-          <label class="mp-toggle"><input type="checkbox" id="mp-mod-speed" onchange="mpHostUpdateSettings()"><span>⚡ Schneller = mehr Punkte</span></label>
-          <label class="mp-toggle"><input type="checkbox" id="mp-mod-timelimit" onchange="mpHostUpdateSettings()"><span>⏱ Zeitlimit</span><input class="modal-input mp-num mp-num-sm" id="mp-timelimit-secs" type="number" min="3" max="300" value="30" onchange="mpHostUpdateSettings()"></label>
+          <label class="mp-mod" for="mp-mod-nomove">
+            <span class="mp-mod-info"><span class="mp-mod-name">🚶 Nicht bewegen</span><span class="mp-mod-desc">Kein Umherfahren zu Nachbar-Panoramen.</span></span>
+            <input type="checkbox" id="mp-mod-nomove" onchange="mpHostUpdateSettings()"><span class="mp-switch"></span>
+          </label>
+          <label class="mp-mod" for="mp-mod-nolook">
+            <span class="mp-mod-info"><span class="mp-mod-name">🙈 Nicht umsehen</span><span class="mp-mod-desc">Ansicht fixiert – kein Drehen oder Zoomen.</span></span>
+            <input type="checkbox" id="mp-mod-nolook" onchange="mpHostUpdateSettings()"><span class="mp-switch"></span>
+          </label>
+          <label class="mp-mod" for="mp-mod-gray">
+            <span class="mp-mod-info"><span class="mp-mod-name">⬜ Schwarz-Weiß</span><span class="mp-mod-desc">Das Panorama wird in Graustufen gezeigt.</span></span>
+            <input type="checkbox" id="mp-mod-gray" onchange="mpHostUpdateSettings()"><span class="mp-switch"></span>
+          </label>
+          <label class="mp-mod" for="mp-mod-blur">
+            <span class="mp-mod-info"><span class="mp-mod-name">🌫️ Verschwommen</span><span class="mp-mod-desc">Das Panorama ist leicht unscharf.</span></span>
+            <input type="checkbox" id="mp-mod-blur" onchange="mpHostUpdateSettings()"><span class="mp-switch"></span>
+          </label>
+          <label class="mp-mod" for="mp-mod-timelimit">
+            <span class="mp-mod-info"><span class="mp-mod-name">⏱️ Zeitlimit</span><span class="mp-mod-desc">Auto-Abgabe nach <input class="mp-inline-num" id="mp-timelimit-secs" type="number" min="3" max="300" value="30" onchange="mpHostUpdateSettings()" onclick="event.stopPropagation()"> Sek.</span></span>
+            <input type="checkbox" id="mp-mod-timelimit" onchange="mpHostUpdateSettings()"><span class="mp-switch"></span>
+          </label>
         </div>
       </div>
     </div>
     <div class="mp-lobby-actions">
-      <button class="big-btn primary" id="mp-ready-btn" onclick="toggleReady()" style="display:none">Bereit ✓</button>
-      <button class="big-btn primary" id="mp-start-btn" onclick="startMatch()" style="display:none">Starten</button>
+      <button class="big-btn" id="mp-host-close-btn" onclick="hostCloseRoom()" style="display:none">Raum schließen</button>
       <button class="big-btn" onclick="leaveRoom()">Verlassen</button>
     </div>
   </div>
@@ -404,7 +425,6 @@
   </div>
   <div id="vs-badge"></div>
   <div id="mp-timer" style="display:none"></div>
-  <div id="mp-speed-badge" style="display:none"></div>
   <div id="vs-opponent-guessed"></div>
   <div id="survival-badge"></div>
   <div id="pano-container">
@@ -616,7 +636,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="data.js?v=2"></script>
 <script src="text.js?v=2"></script>
-<script src="script.js?v=23"></script>
+<script src="script.js?v=24"></script>
 <script src="patches.js?v=12"></script>
 <script src="nav.js?v=7"></script>
 <!-- CHANGELOG MODAL -->

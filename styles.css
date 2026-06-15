@@ -994,7 +994,7 @@ body::before{
   .map-btn{font-size:.54rem;padding:.23rem .4rem}
   #guess-btn{font-size:.72rem;padding:.44rem .9rem;white-space:nowrap}
   #pin-hint{font-size:.48rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #result-footer{padding:.75rem;gap:.6rem}
+  #result-footer{padding:.75rem .75rem calc(.75rem + env(safe-area-inset-bottom));gap:.6rem}
   .result-stats{grid-template-columns:1fr;gap:.4rem}
   .stat{padding:.55rem}
   .stat-value{font-size:.95rem}
@@ -1247,3 +1247,58 @@ body::before{
 .skel-line{height:.8rem;margin:.4rem 0}
 .skel-stat{height:3.2rem;border-radius:10px}
 .skel-ach{height:3rem;margin-bottom:.3rem}
+
+/* ── Pano-Modifier-Filter ── */
+#game-screen.mp-gray #pano-strip img{filter:grayscale(1)!important}
+#game-screen.mp-blur #pano-strip img{filter:blur(7px)!important}
+#game-screen.mp-gray.mp-blur #pano-strip img{filter:grayscale(1) blur(7px)!important}
+
+/* ── Modifier: Toggle-Switches mit Beschreibung ── */
+.mp-mods{display:flex;flex-direction:column;gap:0;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:.3rem .8rem}
+.mp-mods-title{font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);padding:.55rem 0 .35rem}
+.mp-mod{display:flex;align-items:center;justify-content:space-between;gap:.7rem;padding:.6rem 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer;margin:0}
+.mp-mod-info{display:flex;flex-direction:column;gap:.12rem;min-width:0}
+.mp-mod-name{font-size:.8rem;color:var(--cream);font-weight:500}
+.mp-mod-desc{font-size:.62rem;color:var(--mist);line-height:1.35}
+.mp-mod input[type=checkbox]{position:absolute;opacity:0;pointer-events:none}
+.mp-switch{position:relative;width:2.5rem;height:1.4rem;border-radius:1rem;background:rgba(255,255,255,.14);flex-shrink:0;transition:background .25s}
+.mp-switch::after{content:'';position:absolute;top:2px;left:2px;width:calc(1.4rem - 4px);height:calc(1.4rem - 4px);border-radius:50%;background:#fff;transition:transform .26s cubic-bezier(.16,1,.3,1),box-shadow .2s;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.mp-mod input:checked + .mp-switch{background:var(--gold)}
+.mp-mod input:checked + .mp-switch::after{transform:translateX(1.1rem);box-shadow:0 1px 6px rgba(201,168,76,.6)}
+.mp-mod input:disabled + .mp-switch{opacity:.45}
+.mp-mod:has(input:disabled){cursor:not-allowed}
+.mp-inline-num{width:3rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:5px;color:var(--cream);font-family:'DM Mono',monospace;font-size:.7rem;padding:.12rem .25rem;text-align:center}
+
+/* ── Bereit-Bar + Start-Hinweis ── */
+.mp-ready-bar{width:100%;transition:background .2s,opacity .2s,transform .1s}
+.mp-ready-bar.is-ready{background:rgba(125,204,106,.18)!important;border-color:rgba(125,204,106,.55)!important;color:#aee79c!important;cursor:default}
+.mp-ready-bar:disabled{opacity:.9}
+.mp-start-hint{font-size:.66rem;color:var(--mist);text-align:center;min-height:1em;letter-spacing:.03em}
+
+/* ── Warte-Overlay: Namensliste ── */
+.mp-wait-names{display:flex;flex-wrap:wrap;gap:.45rem;justify-content:center;margin-top:.3rem}
+.mp-wait-name{font-family:'DM Mono',monospace;font-size:.8rem;color:var(--cream);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:.35rem .85rem;animation:mpWaitPulse 1.6s ease-in-out infinite}
+@keyframes mpWaitPulse{0%,100%{opacity:.6}50%{opacity:1}}
+
+/* ── Raumliste (Beitreten) ── */
+.mp-roomlist-head{display:flex;align-items:center;justify-content:space-between;font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+.mp-refresh-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:var(--cream);border-radius:6px;width:1.7rem;height:1.7rem;cursor:pointer;font-size:.9rem;line-height:1;transition:transform .3s,background .15s}
+.mp-refresh-btn:hover{background:rgba(255,255,255,.12);transform:rotate(180deg)}
+#vs-room-list{display:flex;flex-direction:column;gap:.4rem;max-height:38vh;overflow-y:auto}
+.mp-room-row{display:grid;grid-template-columns:1fr auto;grid-template-areas:'host join' 'meta join';gap:.05rem .5rem;align-items:center;text-align:left;width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.6rem .75rem;cursor:pointer;transition:border-color .15s,background .15s,transform .1s}
+.mp-room-row:hover{border-color:var(--gold);background:rgba(201,168,76,.08);transform:translateY(-1px)}
+.mp-room-host{grid-area:host;font-size:.82rem;color:var(--cream);font-weight:600}
+.mp-room-meta{grid-area:meta;font-size:.62rem;color:var(--mist)}
+.mp-room-join{grid-area:join;font-size:.72rem;color:var(--gold-light);white-space:nowrap}
+.mp-or{text-align:center;font-size:.6rem;color:var(--mist);letter-spacing:.1em;text-transform:uppercase;margin:.2rem 0 0;position:relative}
+
+/* ── Ergebnis-Listen scrollbar (max ~5 Zeilen) ── */
+.mp-standings-list{max-height:15.5rem;overflow-y:auto;padding-right:.2rem}
+#mp-round-board{max-height:min(70vh,16rem);overflow-y:auto}
+.mp-scrollhint{font-size:.58rem;color:var(--mist);text-align:center;padding-top:.3rem;opacity:.8}
+/* dünne, sichtbare Scrollbar für die Listen */
+#vs-room-list::-webkit-scrollbar,.mp-standings-list::-webkit-scrollbar,#mp-round-board::-webkit-scrollbar,#mp-lobby-players::-webkit-scrollbar{width:6px}
+#vs-room-list::-webkit-scrollbar-thumb,.mp-standings-list::-webkit-scrollbar-thumb,#mp-round-board::-webkit-scrollbar-thumb,#mp-lobby-players::-webkit-scrollbar-thumb{background:rgba(201,168,76,.45);border-radius:3px}
+
+/* Lobby-Box & VS-Modal undurchsichtiger machen (Backdrop nicht durchscheinen lassen) */
+.mp-lobby-box{background:linear-gradient(170deg,rgba(22,42,28,.97),rgba(13,26,17,.98))!important;border-color:rgba(255,255,255,.1)!important;box-shadow:0 24px 70px rgba(0,0,0,.5)!important}

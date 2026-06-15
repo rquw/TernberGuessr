@@ -934,7 +934,7 @@ function loadRound(){
   // Mehrspieler: Modifiers + Rundenuhr anwenden; Solo: Weiter-Button sichtbar
   var _nb=$('next-btn'); if(_nb)_nb.style.display=S.isVs?'none':'';
   if(S.isVs&&typeof applyMpModifiers==='function'){applyMpModifiers();mpStartRoundClock();}
-  else{S.mpNoLook=false;}
+  else{if(typeof mpClearMods==='function')mpClearMods();}
   var _og=$('vs-opponent-guessed');if(_og){_og.classList.remove('show');if(_og._t)clearTimeout(_og._t);}
   // difficulty badge sofort auf 'Unbestimmt' setzen, dann nachladen
   var diffBadgeEl=document.getElementById('top-bar-diff');
@@ -964,8 +964,6 @@ function submitGuess(){
   var pts=calcPts(dist);
   // Entwickler-Cheat: in Hitzewelle mit gehaltener W-Taste automatisch die Schwelle schaffen
   if(S.mode==='survival'&&isDevAccount()&&_wKeyDown){ pts=Math.max(pts,getSurvivalThreshold(S.round)); }
-  // Mehrspieler Speed-Bonus: schneller abgeben → mehr Punkte (×-Multiplikator, am Abgabezeitpunkt fixiert)
-  if(S.isVs&&S.mpModifiers&&S.mpModifiers.speedBonus){ pts=Math.round(pts*mpSpeedMult()); }
   S.score+=pts; S.roundScores.push({round:S.round+1,dist:dist,pts:pts});
   $('res-dist').textContent=fmtD(dist); $('res-pts').textContent='0'; $('res-total').textContent=fmtN(S.score);
   var isLast=S.round>=S.roundsTotal-1;
@@ -1856,7 +1854,36 @@ function showVsPanel(which){
   var b=$('vs-modal-back-btn');if(b)b.style.display='block';
   // nur noch das Beitreten-Panel; Erstellen geht direkt in die Lobby (Einstellungen dort)
   $('vs-join-panel').style.display='flex';
-  setTimeout(function(){var c=$('vs-join-code');if(c)c.focus();},100);
+  // ohne Account: Namensfeld zeigen
+  var nm=$('vs-join-name');if(nm)nm.style.display=loadSession().name?'none':'block';
+  loadRoomList();
+}
+// Liste offener Räume
+async function loadRoomList(){
+  var el=$('vs-room-list');if(!el)return;
+  el.innerHTML='<div class="mp-empty">Lade…</div>';
+  try{
+    var rows=await sbFetch('rooms?status=eq.lobby&select=id,host_name,rounds,max_players,room_players(player_id,kicked,online,last_seen)&order=last_activity.desc&limit=40');
+    var open=(rows||[]).map(function(r){
+      var ps=(r.room_players||[]).filter(function(p){return !p.kicked&&p.online&&p.last_seen&&(Date.now()-new Date(p.last_seen).getTime())<12000;});
+      return {id:r.id,host:r.host_name,n:ps.length,max:r.max_players,rounds:r.rounds};
+    }).filter(function(r){return r.n>0&&(!r.max||r.n<r.max);});
+    if(!open.length){el.innerHTML='<div class="mp-empty">Keine offenen Räume – erstelle selbst einen!</div>';return;}
+    el.innerHTML=open.map(function(r){
+      return '<button class="mp-room-row" onclick="joinRoomFromList(\''+r.id+'\')">'+
+        '<span class="mp-room-host">'+escHtml(r.host||'Raum')+'</span>'+
+        '<span class="mp-room-meta">'+r.n+(r.max?('/'+r.max):'')+' 👤 · '+r.rounds+' Runden</span>'+
+        '<span class="mp-room-join">Beitreten →</span></button>';
+    }).join('');
+  }catch(e){el.innerHTML='<div class="mp-empty">Fehler beim Laden.</div>';}
+}
+async function joinRoomFromList(code){
+  var session=loadSession();
+  var name=session.name||(($('vs-join-name')&&$('vs-join-name').value)||'').trim();
+  if(!name){var e=$('vs-join-error');if(e)e.textContent='Bitte zuerst deinen Namen eingeben.';var nm=$('vs-join-name');if(nm){nm.style.display='block';nm.focus();}return;}
+  var res=await mpJoinByCode(code,name);
+  if(res.error){var er=$('vs-join-error');if(er)er.textContent=res.error;loadRoomList();return;}
+  closeModal('vs-modal');enterLobby();
 }
 // Host ändert Einstellungen live in der Lobby
 function mpHostUpdateSettings(){
@@ -1871,7 +1898,7 @@ function mpReadModifiers(){
   function ck(id){var e=$(id);return !!(e&&e.checked);}
   var tlOn=ck('mp-mod-timelimit');
   var tlVal=parseInt(($('mp-timelimit-secs')&&$('mp-timelimit-secs').value)||'0',10);
-  return {noMove:ck('mp-mod-nomove'),noLook:ck('mp-mod-nolook'),speedBonus:ck('mp-mod-speed'),timeLimit:(tlOn&&tlVal>0)?tlVal:null};
+  return {noMove:ck('mp-mod-nomove'),noLook:ck('mp-mod-nolook'),grayscale:ck('mp-mod-gray'),blur:ck('mp-mod-blur'),timeLimit:(tlOn&&tlVal>0)?tlVal:null};
 }
 
 var roomCreationInProgress=false;
@@ -1881,12 +1908,12 @@ async function createRoom(){
   var session=loadSession();
   var name=session.name||(($('vs-host-name')&&$('vs-host-name').value)||'').trim()||'Spieler';
   // Standard-Einstellungen; der Host passt sie danach live in der Lobby an
-  var rounds=5, maxPlayers=null, modifiers={noMove:false,noLook:false,speedBonus:false,timeLimit:null};
+  var rounds=5, maxPlayers=null, modifiers={noMove:false,noLook:false,grayscale:false,blur:false,timeLimit:null};
   roomCreationInProgress=true;
   var code=randomCode();
   try{
     await sbFetch('rooms','POST',{id:code,host_name:name,host_id:S.playerId,status:'lobby',max_players:maxPlayers,rounds:rounds,modifiers:modifiers,current_round:0,location_ids:[],last_activity:new Date().toISOString()});
-    await sbFetch('room_players','POST',{room_id:code,player_id:S.playerId,name:name,is_host:true,ready:true,online:true,last_seen:new Date().toISOString(),scores:[]});
+    await sbFetch('room_players','POST',{room_id:code,player_id:S.playerId,name:name,is_host:true,ready:false,online:true,last_seen:new Date().toISOString(),scores:[]});
     S.vsRoom=code;S.vsIsHost=true;S.vsMyName=name;S.isVs=false;S._mpStarted=false;
     closeModal('vs-modal');enterLobby();
   }catch(e){alert('Fehler beim Erstellen: '+(e&&e.message?e.message:JSON.stringify(e)));}
@@ -1955,7 +1982,8 @@ function enterLobby(){
   show('mp-lobby-screen');
   var cd=$('mp-lobby-code');if(cd)cd.textContent=S.vsRoom;
   try{var qc=$('mp-lobby-qr');if(qc)drawQR(qc,window.location.origin+window.location.pathname+'?join='+S.vsRoom);}catch(e){}
-  S._mpSettingsInit=false;
+  S._mpSettingsInit=false;S._mpStarting=false;
+  var rb=$('mp-ready-btn');if(rb){rb.disabled=false;rb.textContent='Bereit';rb.classList.remove('is-ready');}
   startMpPoll();startMpHeartbeat();
 }
 function renderLobby(room,players){
@@ -1969,15 +1997,15 @@ function renderLobby(room,players){
   if(!host){
     setVal('mp-rounds',room.rounds||5);
     setVal('mp-maxplayers',room.max_players||'');
-    setChk('mp-mod-nomove',mod.noMove);setChk('mp-mod-nolook',mod.noLook);setChk('mp-mod-speed',mod.speedBonus);
+    setChk('mp-mod-nomove',mod.noMove);setChk('mp-mod-nolook',mod.noLook);setChk('mp-mod-gray',mod.grayscale);setChk('mp-mod-blur',mod.blur);
     setChk('mp-mod-timelimit',!!mod.timeLimit);setVal('mp-timelimit-secs',mod.timeLimit||30);
   } else if(!S._mpSettingsInit){
     S._mpSettingsInit=true;
     setVal('mp-rounds',room.rounds||5);setVal('mp-maxplayers',room.max_players||'');
-    setChk('mp-mod-nomove',mod.noMove);setChk('mp-mod-nolook',mod.noLook);setChk('mp-mod-speed',mod.speedBonus);
+    setChk('mp-mod-nomove',mod.noMove);setChk('mp-mod-nolook',mod.noLook);setChk('mp-mod-gray',mod.grayscale);setChk('mp-mod-blur',mod.blur);
     setChk('mp-mod-timelimit',!!mod.timeLimit);setVal('mp-timelimit-secs',mod.timeLimit||30);
   }
-  ['mp-rounds','mp-maxplayers','mp-mod-nomove','mp-mod-nolook','mp-mod-speed','mp-mod-timelimit','mp-timelimit-secs'].forEach(function(id){setDis(id,!host);});
+  ['mp-rounds','mp-maxplayers','mp-mod-nomove','mp-mod-nolook','mp-mod-gray','mp-mod-blur','mp-mod-timelimit','mp-timelimit-secs'].forEach(function(id){setDis(id,!host);});
   var lock=$('mp-settings-lock');if(lock)lock.textContent=host?'':'(nur Host)';
   var online=mpInMatch(players).filter(function(p){return mpOnline(p)||p.player_id===S.playerId;});
   var cnt=$('mp-lobby-count');if(cnt)cnt.textContent='('+online.length+')';
@@ -1993,40 +2021,48 @@ function renderLobby(room,players){
     }).join(''):'<div class="mp-empty">Warte auf Spieler…</div>';
   }
   var meRow=online.filter(function(p){return p.player_id===S.playerId;})[0];
+  var iAmReady=!!(meRow&&meRow.ready);
+  // Bereit-Button: einmalig, danach ausgegraut. Jeder (auch Host) muss bereit machen.
   var rb=$('mp-ready-btn');
-  if(rb){rb.style.display=S.vsIsHost?'none':'';rb.textContent=(meRow&&meRow.ready)?'Nicht bereit':'Bereit ✓';rb.classList.toggle('active',!!(meRow&&meRow.ready));}
-  var sb=$('mp-start-btn');
-  if(sb){
-    sb.style.display=S.vsIsHost?'':'none';
-    var readyCount=online.filter(function(p){return p.ready;}).length;
-    var allReady=online.length>=2&&readyCount===online.length;
-    sb.disabled=!allReady;
-    sb.textContent=allReady?('Starten ('+online.length+' Spieler)'):('Bereit: '+readyCount+'/'+online.length+(online.length<2?' · min. 2':''));
+  if(rb){ rb.textContent=iAmReady?'Bereit ✓':'Bereit'; rb.disabled=iAmReady; rb.classList.toggle('is-ready',iAmReady); }
+  var readyCount=online.filter(function(p){return p.ready;}).length;
+  var hint=$('mp-start-hint');
+  if(hint){
+    if(online.length<2) hint.textContent='Warte auf mind. 2 Spieler…';
+    else if(readyCount<online.length) hint.textContent='Bereit: '+readyCount+'/'+online.length+' – warte auf alle…';
+    else hint.textContent='Alle bereit – Start…';
   }
+  var hc=$('mp-host-close-btn');if(hc)hc.style.display=S.vsIsHost?'':'none';
 }
 async function toggleReady(){
-  try{
-    var rows=await sbFetch(_pq()+'&select=ready');
-    var cur=rows&&rows[0]&&rows[0].ready;
-    await sbFetch(_pq(),'PATCH',{ready:!cur,last_seen:new Date().toISOString()});
-  }catch(e){}
+  // Einweg: einmal bereit, bleibt bereit (kein Zurück), dann startet automatisch wenn alle bereit
+  try{ await sbFetch(_pq(),'PATCH',{ready:true,last_seen:new Date().toISOString()}); var rb=$('mp-ready-btn');if(rb){rb.disabled=true;rb.textContent='Bereit ✓';rb.classList.add('is-ready');} }catch(e){}
 }
 async function kickPlayer(pid){
   if(!S.vsIsHost)return;
   try{await sbFetch('room_players?room_id=eq.'+S.vsRoom+'&player_id=eq.'+encodeURIComponent(pid),'PATCH',{kicked:true,online:false});}catch(e){}
 }
 async function startMatch(){
-  if(!S.vsIsHost)return;
+  if(!S.vsIsHost){S._mpStarting=false;return;}
   try{
-    var rows=await sbFetch('rooms?id=eq.'+S.vsRoom+'&select=rounds,room_players(player_id,ready,online,kicked,last_seen)');
-    var room=rows&&rows[0];if(!room)return;
+    var rows=await sbFetch('rooms?id=eq.'+S.vsRoom+'&select=rounds,status,room_players(player_id,ready,online,kicked,last_seen)');
+    var room=rows&&rows[0];if(!room){S._mpStarting=false;return;}
+    if(room.status!=='lobby'){return;} // schon gestartet
     var online=(room.room_players||[]).filter(function(p){return mpOnline(p)||p.player_id===S.playerId;});
-    if(online.length<2||!online.every(function(p){return p.ready;}))return;
+    if(online.length<2||!online.every(function(p){return p.ready;})){S._mpStarting=false;return;}
     var n=Math.max(1,room.rounds||5);
     var locs=shuffle(LOCATIONS.slice()).slice(0,n).map(function(l){return l.id;});
     await sbFetch('room_players?room_id=eq.'+S.vsRoom,'PATCH',{scores:[],guess_latlng:null});
     await sbFetch('rooms?id=eq.'+S.vsRoom,'PATCH',{status:'playing',current_round:0,location_ids:locs,round_started_at:new Date().toISOString(),last_activity:new Date().toISOString()});
-  }catch(e){}
+  }catch(e){S._mpStarting=false;}
+}
+// Host schließt den Raum für alle
+async function hostCloseRoom(){
+  if(!S.vsIsHost||!S.vsRoom)return;
+  if(!confirm('Raum für alle schließen?'))return;
+  try{ await sbFetch('rooms?id=eq.'+S.vsRoom,'DELETE'); }catch(e){}
+  stopMpPolls();if(S.heartbeatInterval){clearInterval(S.heartbeatInterval);S.heartbeatInterval=null;}
+  S.isVs=false;S.vsRoom=null;S._mpStarted=false;show('start-screen');
 }
 function cancelRoom(){ leaveRoom(); }
 function leaveRoom(){ cleanupRoom(); show('start-screen'); }
@@ -2049,9 +2085,17 @@ async function mpPollTick(){
     S.mpRoom=room;S.mpPlayers=players;S.mpModifiers=room.modifiers||{};S.vsIsHost=(room.host_id===S.playerId);
     var me=players.filter(function(p){return p.player_id===S.playerId;})[0];
     if(me&&me.kicked){handleKicked();return;}
+    mpDetectLeavers(players);
+    mpMaybeMigrateHost(room,players);
+    S.vsIsHost=(room.host_id===S.playerId);
     if($('mp-lobby-screen').classList.contains('active')){
       renderLobby(room,players);
-      if(room.status==='playing'){beginMpMatch(room);}
+      if(room.status==='playing'){beginMpMatch(room);return;}
+      // Host: sobald alle (inkl. Host) bereit sind, automatisch starten
+      if(S.vsIsHost&&room.status==='lobby'&&!S._mpStarting){
+        var on=mpInMatch(players).filter(function(p){return mpOnline(p)||p.player_id===S.playerId;});
+        if(on.length>=2&&on.every(function(p){return p.ready;})){ S._mpStarting=true; startMatch(); }
+      }
       return;
     }
     if(room.status==='playing'){
@@ -2070,6 +2114,31 @@ async function mpPollTick(){
     // status 'finished' → auf dem Endbildschirm bleiben
   }catch(e){}
 }
+// Host-Migration: wenn der Host offline ist, übernimmt deterministisch der Online-Spieler mit der kleinsten ID
+function mpMaybeMigrateHost(room,players){
+  if(!room.host_id||!S.vsRoom)return;
+  var hostRow=players.filter(function(p){return p.player_id===room.host_id;})[0];
+  if(hostRow&&mpOnline(hostRow))return; // Host da
+  var online=mpInMatch(players).filter(function(p){return mpOnline(p);});
+  if(!online.length)return;
+  online.sort(function(a,b){return a.player_id<b.player_id?-1:1;});
+  if(online[0].player_id!==S.playerId)return; // nur der designierte Nachfolger handelt
+  if(S._mpMigrating)return; S._mpMigrating=true;
+  sbFetch('rooms?id=eq.'+S.vsRoom,'PATCH',{host_id:S.playerId,last_activity:new Date().toISOString()})
+    .then(function(){ S.vsIsHost=true; S._mpSettingsInit=false; showDcNotice('Du bist jetzt Host 👑'); if(S._mpLeaveT)clearTimeout(S._mpLeaveT); S._mpLeaveT=setTimeout(hideDcNotice,3500); setTimeout(function(){S._mpMigrating=false;},2000); })
+    .catch(function(){S._mpMigrating=false;});
+}
+// Meldung, wenn ein Spieler den Raum verlässt / die Verbindung verliert
+function mpDetectLeavers(players){
+  var nowOnline={};
+  mpInMatch(players).forEach(function(p){ if(mpOnline(p)) nowOnline[p.player_id]=p.name; });
+  if(S._mpPrevOnline){
+    Object.keys(S._mpPrevOnline).forEach(function(id){
+      if(id!==S.playerId && !nowOnline[id]){ showDcNotice((S._mpPrevOnline[id]||'Ein Spieler')+' hat den Raum verlassen.'); if(S._mpLeaveT)clearTimeout(S._mpLeaveT); S._mpLeaveT=setTimeout(hideDcNotice,3500); }
+    });
+  }
+  S._mpPrevOnline=nowOnline;
+}
 function startMpHeartbeat(){
   if(S.heartbeatInterval)clearInterval(S.heartbeatInterval);
   function beat(){ if(!S.vsRoom)return; sbFetch(_pq(),'PATCH',{online:true,last_seen:new Date().toISOString()}).catch(function(){}); }
@@ -2085,8 +2154,16 @@ window.addEventListener('beforeunload',vsMarkOffline);
 async function cleanupRoom(){
   vsMarkOffline();
   try{
-    if(S.vsIsHost&&S.vsRoom){ await sbFetch('rooms?id=eq.'+S.vsRoom,'DELETE'); }
-    else if(S.vsRoom){ await sbFetch(_pq(),'DELETE'); }
+    if(S.vsIsHost&&S.vsRoom){
+      // Host verlässt → Hosttitel an anderen Online-Spieler übergeben, sonst Raum löschen
+      var rows=await sbFetch('rooms?id=eq.'+S.vsRoom+'&select=room_players(player_id,online,last_seen,kicked)');
+      var others=((rows&&rows[0]&&rows[0].room_players)||[]).filter(function(p){return p.player_id!==S.playerId&&!p.kicked&&p.online&&p.last_seen&&(Date.now()-new Date(p.last_seen).getTime())<12000;});
+      if(others.length){
+        others.sort(function(a,b){return a.player_id<b.player_id?-1:1;});
+        await sbFetch('rooms?id=eq.'+S.vsRoom,'PATCH',{host_id:others[0].player_id,last_activity:new Date().toISOString()});
+        await sbFetch(_pq(),'DELETE');
+      } else { await sbFetch('rooms?id=eq.'+S.vsRoom,'DELETE'); }
+    } else if(S.vsRoom){ await sbFetch(_pq(),'DELETE'); }
   }catch(e){}
   stopMpPolls();
   if(S.heartbeatInterval){clearInterval(S.heartbeatInterval);S.heartbeatInterval=null;}
@@ -2140,8 +2217,10 @@ function goToMpRound(targetRound,room){
   if(Date.now()-(S._lastMpAdvanceAt||0)<500)return;
   S._lastMpAdvanceAt=Date.now();
   mpClearRoundClock();
+  if(S._mpRevealIv){clearInterval(S._mpRevealIv);S._mpRevealIv=null;}
   S.round=targetRound;
-  S.vsTheirDone=false;S._mpWaitForLen=0;S._mpRepushing=false;S._mpLastGuess=null;S._mpAdvanceAt=0;
+  S.vsTheirDone=false;S._mpWaitForLen=0;S._mpRepushing=false;S._mpLastGuess=null;S._mpAdvanceAt=0;S._mpRevealed=false;
+  hideVsWaitOverlay();
   var board=$('mp-round-board');if(board){board.style.display='none';board.innerHTML='';}
   var row=$('vs-their-guess-row');if(row){row.style.display='none';row.innerHTML='';}
   hideVsWaitOverlay();var bw=$('vs-bottom-wait');if(bw)bw.classList.remove('show');
@@ -2160,7 +2239,7 @@ function mpHostMaybeAdvance(room,players){
   var elapsed=(Date.now()-(S.mpRoundStartedAt||Date.now()))/1000;
   var timeUp=mod.timeLimit&&elapsed>(mod.timeLimit+5);
   if(allDone||timeUp){
-    if(!S._mpAdvanceAt)S._mpAdvanceAt=Date.now()+(allDone?2600:0);
+    if(!S._mpAdvanceAt)S._mpAdvanceAt=Date.now()+(allDone?4000:0);
     if(Date.now()<S._mpAdvanceAt)return;
     S._mpAdvanceLock=true;S._mpAdvanceAt=0;
     var next=S.round+1;
@@ -2176,37 +2255,47 @@ function applyMpModifiers(){
   try{ if(window.NAV){ NAV.locked=!!mod.noMove; var ov=document.getElementById('nav-arrows'); if(ov)ov.classList.toggle('nav-locked',!!mod.noMove);} }catch(e){}
   S.mpNoLook=!!mod.noLook;
   var dh=$('drag-hint');if(dh&&mod.noLook)dh.style.display='none';
+  var gs=$('game-screen');
+  if(gs){ gs.classList.toggle('mp-gray',!!mod.grayscale); gs.classList.toggle('mp-blur',!!mod.blur); }
 }
-function mpSpeedMult(){
-  if(!(S.mpModifiers&&S.mpModifiers.speedBonus))return 1;
-  var el=(Date.now()-(S.mpRoundStartedAt||Date.now()))/1000;
-  return Math.max(1,Math.min(2,2-(el-1)/59));
-}
+function mpClearMods(){ var gs=$('game-screen'); if(gs){gs.classList.remove('mp-gray','mp-blur');} S.mpNoLook=false; }
 function mpClearRoundClock(){ if(S._mpClock){clearInterval(S._mpClock);S._mpClock=null;} }
 function mpStartRoundClock(){
   mpClearRoundClock();
   var mod=S.mpModifiers||{};
-  var badge=$('mp-speed-badge');if(badge)badge.style.display=mod.speedBonus?'block':'none';
   var timerEl=$('mp-timer');if(timerEl)timerEl.style.display=mod.timeLimit?'block':'none';
-  if(!mod.speedBonus&&!mod.timeLimit)return;
+  if(!mod.timeLimit)return;
   S._mpClock=setInterval(function(){
     if(!$('game-screen').classList.contains('active'))return;
-    if(mod.speedBonus&&badge)badge.textContent='⚡ '+mpSpeedMult().toFixed(2)+'×';
-    if(mod.timeLimit){
-      var left=Math.ceil(mod.timeLimit-(Date.now()-(S.mpRoundStartedAt||Date.now()))/1000);
-      if(timerEl)timerEl.textContent='⏱ '+Math.max(0,left)+'s';
-      if(left<=0){ mpClearRoundClock(); if($('game-screen').classList.contains('active')){ if(!S.guessLatLng)S.guessLatLng={lat:CENTER[0],lng:CENTER[1]}; submitGuess(); } }
-    }
+    var left=Math.ceil(mod.timeLimit-(Date.now()-(S.mpRoundStartedAt||Date.now()))/1000);
+    if(timerEl)timerEl.textContent='⏱ '+Math.max(0,left)+'s';
+    if(left<=0){ mpClearRoundClock(); if($('game-screen').classList.contains('active')){ if(!S.guessLatLng)S.guessLatLng={lat:CENTER[0],lng:CENTER[1]}; submitGuess(); } }
   },250);
 }
 
 // ── Abgeben + Erkennung ──
 function mpOnSubmit(pts){
-  S._mpWaitForLen=S.round+1;S._mpLastPts=pts;S._mpLastGuess={lat:S.guessLatLng.lat,lng:S.guessLatLng.lng};S._mpRepushing=false;
+  S._mpWaitForLen=S.round+1;S._mpLastPts=pts;S._mpLastGuess={lat:S.guessLatLng.lat,lng:S.guessLatLng.lng};S._mpRepushing=false;S._mpRevealed=false;
   mpClearRoundClock();
   pushMpScore(pts,S.guessLatLng);
-  var bw=$('vs-bottom-wait');if(bw){bw.textContent='⏳ Warte auf die anderen Spieler…';bw.classList.add('show');}
+  showMpWaitOverlay([]); // Ergebnis erst zeigen, wenn ALLE fertig sind
   var nb=$('next-btn');if(nb)nb.style.display='none';
+  var bw=$('vs-bottom-wait');if(bw)bw.classList.remove('show');
+}
+// Vollbild-Warteoverlay: "Warten auf:" + noch ratende Spieler
+function showMpWaitOverlay(names){
+  var o=$('vs-wait-overlay');if(!o)return;
+  var t=$('vs-wait-overlay-text');if(t)t.textContent='Warten auf';
+  var sub=$('vs-wait-overlay-sub');
+  if(sub)sub.innerHTML=(names&&names.length)?('<div class="mp-wait-names">'+names.map(function(n){return '<span class="mp-wait-name">'+escHtml(n)+'</span>';}).join('')+'</div>'):'<div class="mp-wait-names"><span class="mp-wait-name">…</span></div>';
+  o.classList.add('show');
+}
+function startMpRevealCountdown(){
+  if(S._mpRevealIv){clearInterval(S._mpRevealIv);}
+  var start=Date.now(),dur=4000,bw=$('vs-bottom-wait');
+  if(bw)bw.classList.add('show');
+  function upd(){var left=Math.max(0,Math.ceil((dur-(Date.now()-start))/1000));if(bw)bw.textContent=left>0?('Nächste Runde in '+left+'…'):'Nächste Runde…';if(left<=0){clearInterval(S._mpRevealIv);S._mpRevealIv=null;}}
+  upd();S._mpRevealIv=setInterval(upd,250);
 }
 async function pushMpScore(pts,guessLL){
   var roundIdx=S.round;
@@ -2232,26 +2321,32 @@ function mpUpdateLiveState(room,players){
     }
   }
   if(!$('result-screen').classList.contains('active'))return;
-  // Status-Zeile: warten vs. gleich weiter
+  if(!S._mpWaitForLen)return; // ich habe diese Runde noch nicht abgegeben
   var onlineN=inMatch.filter(function(p){return mpOnline(p)||p.player_id===S.playerId;});
-  var allDone=onlineN.length>0&&onlineN.every(function(p){return (p.scores||[]).length>S.round;});
-  var bw=$('vs-bottom-wait');
-  if(bw&&S._mpWaitForLen){ bw.classList.add('show'); bw.textContent=allDone?'✓ Alle fertig – nächste Runde startet gleich…':('⏳ Warte auf die anderen Spieler… ('+onlineN.filter(function(p){return (p.scores||[]).length>S.round;}).length+'/'+onlineN.length+')'); }
-  if(inMatch.length<=2){
-    var opp=inMatch.filter(function(p){return p.player_id!==S.playerId;})[0];
-    if(opp&&(opp.scores||[]).length>S.round&&!S.vsTheirDone){
-      S.vsTheirDone=true;
-      var tg=opp.guess_latlng;
-      var theirPts=(opp.scores||[])[S.round]||0;
-      if(tg&&(tg.round===undefined||tg.round===S.round)){
-        if(S.resultMap){try{L.circleMarker([tg.lat,tg.lng],{radius:8,color:'#8fa89a',fillColor:'#8fa89a',fillOpacity:.8,weight:2}).addTo(S.resultMap).bindTooltip(opp.name,{permanent:true,direction:'top'});}catch(e){}}
-        var theirDist=haversine(tg.lat,tg.lng,S.current.lat,S.current.lng);
-        var myDist=haversine(S.guessLatLng.lat,S.guessLatLng.lng,S.current.lat,S.current.lng);
-        var myPts=S.roundScores[S.round]?S.roundScores[S.round].pts:0;
-        renderRoundCompare(myDist,myPts,theirDist,theirPts);
-      }
+  var notDone=onlineN.filter(function(p){return (p.scores||[]).length<=S.round;});
+  if(notDone.length>0){
+    // Noch nicht alle fertig → nur Warte-Overlay mit den noch ratenden Spielern, KEIN Ergebnis
+    showMpWaitOverlay(notDone.map(function(p){return p.name;}));
+    return;
+  }
+  // Alle fertig → Ergebnis einmalig aufdecken + Countdown
+  if(!S._mpRevealed){
+    S._mpRevealed=true;
+    hideVsWaitOverlay();
+    if(inMatch.length<=2){
+      var opp=inMatch.filter(function(p){return p.player_id!==S.playerId;})[0];
+      var tg=opp&&opp.guess_latlng;
+      if(tg&&(tg.round===undefined||tg.round===S.round)&&S.resultMap){try{L.circleMarker([tg.lat,tg.lng],{radius:8,color:'#8fa89a',fillColor:'#8fa89a',fillOpacity:.8,weight:2}).addTo(S.resultMap).bindTooltip(opp.name,{permanent:true,direction:'top'});}catch(e){}}
+      var theirPts=opp?((opp.scores||[])[S.round]||0):0;
+      var theirDist=tg?haversine(tg.lat,tg.lng,S.current.lat,S.current.lng):0;
+      var myDist=haversine(S.guessLatLng.lat,S.guessLatLng.lng,S.current.lat,S.current.lng);
+      var myPts=S.roundScores[S.round]?S.roundScores[S.round].pts:0;
+      if(opp)renderRoundCompare(myDist,myPts,theirDist,theirPts);
+    }else{
+      renderMpRoundBoard(inMatch);
     }
-  }else{
+    startMpRevealCountdown();
+  }else if(inMatch.length>2){
     renderMpRoundBoard(inMatch);
   }
 }
@@ -2265,7 +2360,7 @@ function renderMpRoundBoard(inMatch){
       '<span class="mp-board-rank">'+(r.pts==null?'·':(i+1))+'</span>'+
       '<span class="mp-board-name">'+escHtml(r.name)+(you?' (Du)':'')+'</span>'+
       '<span class="mp-board-pts">'+(r.pts==null?'…':fmtN(r.pts))+'</span></div>';
-  }).join('');
+  }).join('')+(rows.length>5?'<div class="mp-scrollhint">↓ scrollen ('+rows.length+')</div>':'');
   board.style.display='block';
 }
 function renderRoundCompare(myDist,myPts,theirDist,theirPts){
@@ -2343,7 +2438,7 @@ function showMpStandings(sorted,placement){
       '<span class="mp-standings-name">'+escHtml(p.name)+(you?' (Du)':'')+'</span>'+
       '<span class="mp-standings-total">'+fmtN(p._total)+'</span></div>';
   }).join('');
-  el.innerHTML=head+'<div class="mp-standings-list">'+listHtml+'</div>';
+  el.innerHTML=head+'<div class="mp-standings-list">'+listHtml+'</div>'+(sorted.length>5?'<div class="mp-scrollhint">↓ scrollen für alle '+sorted.length+' Spieler</div>':'');
 }
 
 // Weiter-Button / Space: Solo etc. → nächste Runde; Mehrspieler rückt automatisch vor (kein manuelles Voten)
@@ -2360,7 +2455,6 @@ async function backToLobby(){
   if(S.vsIsHost&&S.vsRoom){
     try{
       await sbFetch('room_players?room_id=eq.'+S.vsRoom,'PATCH',{scores:[],guess_latlng:null,ready:false});
-      await sbFetch(_pq(),'PATCH',{ready:true});
       await sbFetch('rooms?id=eq.'+S.vsRoom,'PATCH',{status:'lobby',current_round:0,location_ids:[],round_started_at:null,last_activity:new Date().toISOString()});
     }catch(e){}
   }
@@ -2432,7 +2526,7 @@ document.addEventListener('dragstart',function(e){e.preventDefault();});
 // ── Init ──
 window.addEventListener('load',function(){
   show('start-screen');
-  setTimeout(function(){var ses=loadSession();if(!ses.name||!ses.pwHash)openLoginModal();},800);
+  setTimeout(function(){var ses=loadSession();if((!ses.name||!ses.pwHash)&&!S.qrPendingCode&&!$('qr-join-screen').classList.contains('active')&&!$('mp-lobby-screen').classList.contains('active'))openLoginModal();},800);
   setTimeout(function(){$('logo-h1').classList.add('in');},100);
   setTimeout(function(){$('logo-p').classList.add('in');},200);
   setTimeout(function(){$('start-main').classList.add('in');},300);
